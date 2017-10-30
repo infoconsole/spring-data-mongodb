@@ -739,8 +739,9 @@ public class MongoTemplateTests {
 		assertThat(notFound, nullValue());
 	}
 
-	@Test
+	@Test // DATAMONGO-1761
 	public void testDistinct() {
+
 		Address address1 = new Address();
 		address1.state = "PA";
 		address1.city = "Philadelphia";
@@ -760,16 +761,13 @@ public class MongoTemplateTests {
 		template.save(person1);
 		template.save(person2);
 
-		List<String> nameList = template.distinct("name", MyPerson.class, String.class);
-		assertTrue(nameList.containsAll(Arrays.asList(person1.getName(), person2.getName())));
-
-		Query query = new BasicQuery("{'address.state' : 'PA'}");
-		nameList = template.distinct(query, "name", MyPerson.class, String.class);
-		assertTrue(nameList.containsAll(Arrays.asList(person1.getName(), person2.getName())));
-
-		String collectionName = template.determineCollectionName(MyPerson.class);
-		nameList = template.distinct(query, "name", collectionName, String.class);
-		assertTrue(nameList.containsAll(Arrays.asList(person1.getName(), person2.getName())));
+		assertThat(template.findDistinct("name", MyPerson.class, String.class)).containsExactlyInAnyOrder(person1.getName(),
+				person2.getName());
+		assertThat(template.findDistinct(new BasicQuery("{'address.state' : 'PA'}"), "name", MyPerson.class, String.class))
+				.containsExactlyInAnyOrder(person1.getName(), person2.getName());
+		assertThat(template.findDistinct(new BasicQuery("{'address.state' : 'PA'}"), "name",
+				template.determineCollectionName(MyPerson.class), MyPerson.class, String.class))
+						.containsExactlyInAnyOrder(person1.getName(), person2.getName());
 	}
 
 	@Test
