@@ -754,6 +754,21 @@ public interface MongoOperations extends FluentMongoOperations {
 			Class<T> resultClass);
 
 	/**
+	 * Finds the distinct values for a specified {@literal field} across a single {@link MongoCollection} or view and
+	 * returns the results in a {@link List}.
+	 *
+	 * @param query filter {@link Query} to restrict search. Must not be {@literal null}.
+	 * @param field the name of the field to inspect for distinct values. Must not be {@literal null}.
+	 * @param collection the explicit name of the actual {@link MongoCollection}. Must not be {@literal null}.
+	 * @param resultClass the result type. Must not be {@literal null}.
+	 * @param <T>
+	 * @return
+	 */
+	default <T> List<T> findDistinct(Query query, String field, String collection, Class<T> resultClass) {
+		return findDistinct(query, field, collection, Object.class, resultClass);
+	}
+
+	/**
 	 * Triggers <a href="https://docs.mongodb.org/manual/reference/method/db.collection.findAndModify/">findAndModify<a/>
 	 * to apply provided {@link Update} on documents matching {@link Criteria} of given {@link Query}.
 	 *

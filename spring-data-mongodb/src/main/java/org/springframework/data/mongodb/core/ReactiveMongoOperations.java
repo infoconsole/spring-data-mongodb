@@ -378,6 +378,50 @@ public interface ReactiveMongoOperations extends ReactiveFluentMongoOperations {
 	<T> Mono<T> findById(Object id, Class<T> entityClass, String collectionName);
 
 	/**
+	 * Finds the distinct values for a specified {@literal field} across a single {@link MongoCollection} or view and
+	 * returns the results in a {@link List}.
+	 *
+	 * @param field the name of the field to inspect for distinct values. Must not be {@literal null}.
+	 * @param entityClass the domain type used for determining the actual {@link MongoCollection}. Must not be
+	 *          {@literal null}.
+	 * @param resultClass the result type. Must not be {@literal null}.
+	 * @return never {@literal null}.
+	 * @since 2.1
+	 */
+	default <S, T> Flux<T> findDistinct(String field, Class<S> entityClass, Class<T> resultClass) {
+		return findDistinct(new Query(), field, entityClass, resultClass);
+	}
+
+	/**
+	 * Finds the distinct values for a specified {@literal field} across a single {@link MongoCollection} or view and
+	 * returns the results in a {@link List}.
+	 *
+	 * @param query filter {@link Query} to restrict search. Must not be {@literal null}.
+	 * @param field the name of the field to inspect for distinct values. Must not be {@literal null}.
+	 * @param entityClass the domain type used for determining the actual {@link MongoCollection} and mapping the
+	 *          {@link Query} to the domain type fields. Must not be {@literal null}.
+	 * @param resultClass the result type. Must not be {@literal null}.
+	 * @return never {@literal null}.
+	 * @since 2.1
+	 */
+	<S, T> Flux<T> findDistinct(Query query, String field, Class<S> entityClass, Class<T> resultClass);
+
+	/**
+	 * Finds the distinct values for a specified {@literal field} across a single {@link MongoCollection} or view and
+	 * returns the results in a {@link List}.
+	 *
+	 * @param query filter {@link Query} to restrict search. Must not be {@literal null}.
+	 * @param field the name of the field to inspect for distinct values. Must not be {@literal null}.
+	 * @param collectionName the explicit name of the actual {@link MongoCollection}. Must not be {@literal null}.
+	 * @param entityClass the domain type used for mapping the {@link Query} to the domain type fields.
+	 * @param resultClass the result type. Must not be {@literal null}.
+	 * @return never {@literal null}.
+	 * @since 2.1
+	 */
+	<S, T> Flux<T> findDistinct(Query query, String field, String collectionName, Class<S> entityClass,
+			Class<T> resultClass);
+
+	/**
 	 * Execute an aggregation operation.
 	 * <p>
 	 * The raw results will be mapped to the given entity class.

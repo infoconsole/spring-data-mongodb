@@ -127,6 +127,7 @@ import com.mongodb.MongoException;
 import com.mongodb.ReadPreference;
 import com.mongodb.WriteConcern;
 import com.mongodb.client.AggregateIterable;
+import com.mongodb.client.DistinctIterable;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.MapReduceIterable;
 import com.mongodb.client.MongoCollection;
@@ -811,7 +812,7 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 	}
 
 	/*
-	 * (non-Javadoc) 
+	 * (non-Javadoc)
 	 * @see org.springframework.data.mongodb.core.MongoOperations#findDistinct(org.springframework.data.mongodb.core.query.Query, java.lang.String, java.lang.String, java.lang.Class, java.lang.Class)
 	 */
 	@Override
@@ -824,15 +825,21 @@ public class MongoTemplate implements MongoOperations, ApplicationContextAware, 
 		Assert.notNull(entityClass, "EntityClass must not be null!");
 		Assert.notNull(resultClass, "ResultClass must not be null!");
 
-		MongoPersistentEntity<?> entity = getPersistentEntity(entityClass);
+		MongoPersistentEntity<?> entity = entityClass != Object.class ? getPersistentEntity(entityClass) : null;
 
 		Document mappedQuery = queryMapper.getMappedObject(query.getQueryObject(), entity);
 		String mappedFieldName = queryMapper.getMappedFields(new Document(field, 1), entity).keySet().iterator().next();
 
 		Class<?> mongoDriverCompatibleType = verifyAndDefaultResultTypeToDriverCapabilities(resultClass);
 
-		MongoIterable<?> result = execute(
-				(db) -> db.getCollection(collectionName).distinct(mappedFieldName, mappedQuery, mongoDriverCompatibleType));
+		MongoIterable<?> result = execute((db) -> {
+
+			DistinctIterable<?> iterable = db.getCollection(collectionName).distinct(mappedFieldName, mappedQuery,
+					mongoDriverCompatibleType);
+
+			return query.getCollation().isPresent()
+					? iterable.collation(query.getCollation().map(Collation::toMongoCollation).get()) : iterable;
+		});
 
 		if (resultClass == Object.class || mongoDriverCompatibleType != resultClass) {
 			result = result.map(mapDistinctResult(getMostSpecificConversionTargetType(resultClass, entityClass, field)));

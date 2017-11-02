@@ -244,7 +244,7 @@ public interface ExecutableFindOperation {
 	 * @author Christoph Strobl
 	 * @since 2.1
 	 */
-	interface DistinctWithProjection<T> {
+	interface DistinctWithProjection {
 
 		/**
 		 * Define the target type the result should be mapped to. <br />
@@ -256,7 +256,7 @@ public interface ExecutableFindOperation {
 		 * respect to the domain types property.<br />
 		 * Any {@link org.bson.BsonType#DOCUMENT} is run through the {@link org.springframework.data.convert.EntityReader}
 		 * to obtain the domain type. <br />
-		 * Using {@link Object} also works for non strictly typed fields. Egö a mixture different types like fields using
+		 * Using {@link Object} also works for non strictly typed fields. Eg. a mixture different types like fields using
 		 * {@link String} in one {@link org.bson.Document} while {@link Long} in another.</dd>
 		 * <dt>Any Simple type like {@link String}, {@link Long}, ...</dt>
 		 * <dd>The result is mapped directly by the MongoDB Java driver and the {@link org.bson.codecs.CodeCodec Codecs} in
@@ -275,7 +275,7 @@ public interface ExecutableFindOperation {
 		 * @return new instance of {@link TerminatingDistinct}.
 		 * @throws IllegalArgumentException if resultType is {@literal null}.
 		 */
-		<R> TerminatingDistinct as(Class<R> resultType);
+		<R> TerminatingDistinct<R> as(Class<R> resultType);
 	}
 
 	/**
@@ -284,7 +284,7 @@ public interface ExecutableFindOperation {
 	 * @author Christoph Strobl
 	 * @since 2.1
 	 */
-	interface DistinctWithQuery<T> extends DistinctWithProjection<T> {
+	interface DistinctWithQuery<T> extends DistinctWithProjection {
 
 		/**
 		 * Set the filter query to be used.

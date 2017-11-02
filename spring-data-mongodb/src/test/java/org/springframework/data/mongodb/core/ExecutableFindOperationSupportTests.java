@@ -422,7 +422,7 @@ public class ExecutableFindOperationSupportTests {
 		template.save(anakin);
 
 		assertThat(template.query(Person.class).distinct("ability").as(Sith.class).all())
-				.containsExactlyInAnyOrder(anakin.ability);
+				.containsExactlyInAnyOrder((Sith) anakin.ability);
 	}
 
 	@Test // DATAMONGO-1761
@@ -472,6 +472,18 @@ public class ExecutableFindOperationSupportTests {
 		template.save(luke);
 
 		assertThat(template.query(Person.class).distinct("father").as(Jedi.class).all())
+				.containsExactlyInAnyOrder(new Jedi("anakin"));
+	}
+
+	@Test // DATAMONGO-1761
+	public void distinctAlllowsQueryUsingObjectSourceType() {
+
+		luke.father = new Person();
+		luke.father.firstname = "anakin";
+
+		template.save(luke);
+
+		assertThat(template.query(Object.class).inCollection(STAR_WARS).distinct("father").as(Jedi.class).all())
 				.containsExactlyInAnyOrder(new Jedi("anakin"));
 	}
 

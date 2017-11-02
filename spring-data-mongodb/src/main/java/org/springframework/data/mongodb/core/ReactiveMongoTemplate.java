@@ -40,7 +40,9 @@ import java.util.stream.Collectors;
 
 import javax.annotation.Nonnull;
 
+import org.bson.BsonValue;
 import org.bson.Document;
+import org.bson.codecs.configuration.CodecConfigurationException;
 import org.bson.conversions.Bson;
 import org.bson.types.ObjectId;
 import org.reactivestreams.Publisher;
@@ -65,6 +67,8 @@ import org.springframework.data.geo.GeoResult;
 import org.springframework.data.geo.Metric;
 import org.springframework.data.mapping.MappingException;
 import org.springframework.data.mapping.PersistentPropertyAccessor;
+import org.springframework.data.mapping.PropertyPath;
+import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.data.mapping.context.MappingContext;
 import org.springframework.data.mapping.model.ConvertingPropertyAccessor;
 import org.springframework.data.mongodb.MongoDbFactory;
@@ -104,6 +108,7 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.NearQuery;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
+import org.springframework.data.mongodb.util.BsonUtils;
 import org.springframework.data.mongodb.util.MongoClientVersion;
 import org.springframework.data.projection.ProjectionInformation;
 import org.springframework.data.projection.SpelAwareProxyProjectionFactory;
@@ -133,6 +138,7 @@ import com.mongodb.client.model.UpdateOptions;
 import com.mongodb.client.result.DeleteResult;
 import com.mongodb.client.result.UpdateResult;
 import com.mongodb.reactivestreams.client.AggregatePublisher;
+import com.mongodb.reactivestreams.client.DistinctPublisher;
 import com.mongodb.reactivestreams.client.FindPublisher;
 import com.mongodb.reactivestreams.client.MongoClient;
 import com.mongodb.reactivestreams.client.MongoCollection;
@@ -673,6 +679,124 @@ public class ReactiveMongoTemplate implements ReactiveMongoOperations, Applicati
 		String idKey = idProperty == null ? ID_FIELD : idProperty.getName();
 
 		return doFindOne(collectionName, new Document(idKey, id), null, entityClass, null);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.mongodb.core.ReactiveMongoOperations#findDistinct(org.springframework.data.mongodb.core.query.Query, java.lang.String, java.lang.Class, java.lang.Class)
+	 */
+	public <S, T> Flux<T> findDistinct(Query query, String field, Class<S> entityClass, Class<T> resultClass) {
+		return findDistinct(query, field, determineCollectionName(entityClass), entityClass, resultClass);
+	}
+
+	/*
+	 * (non-Javadoc)
+	 * @see org.springframework.data.mongodb.core.ReactiveMongoOperations#findDistinct(org.springframework.data.mongodb.core.query.Query, java.lang.String, java.lang.String, java.lang.Class, java.lang.Class)
+	 */
+	public <S, T> Flux<T> findDistinct(Query query, String field, String collectionName, Class<S> entityClass,
+			Class<T> resultClass) {
+
+		Assert.notNull(query, "Query must not be null!");
+		Assert.notNull(field, "Field must not be null!");
+		Assert.notNull(collectionName, "CollectionName must not be null!");
+		Assert.notNull(entityClass, "EntityClass must not be null!");
+		Assert.notNull(resultClass, "ResultClass must not be null!");
+
+		MongoPersistentEntity<?> entity = getPersistentEntity(entityClass);
+
+		Document mappedQuery = queryMapper.getMappedObject(query.getQueryObject(), entity);
+		String mappedFieldName = queryMapper.getMappedFields(new Document(field, 1), entity).keySet().iterator().next();
+
+		Class<?> mongoDriverCompatibleType = verifyAndDefaultResultTypeToDriverCapabilities(resultClass);
+
+		Flux result = execute(collectionName, collection -> {
+
+			DistinctPublisher iterable = collection.distinct(mappedFieldName, mappedQuery, mongoDriverCompatibleType);
+
+			return query.getCollation().isPresent()
+					? iterable.collation(query.getCollation().map(Collation::toMongoCollation).get()) : iterable;
+		});
+
+		if (resultClass == Object.class || mongoDriverCompatibleType != resultClass) {
+			result = result.map(mapDistinctResult(getMostSpecificConversionTargetType(resultClass, entityClass, field)));
+		}
+
+		return result;
+	}
+
+	/**
+	 * @param userType must not be {@literal null}.
+	 * @return the most specific result type that can be handled by the driver.
+	 * @since 2.1
+	 */
+	private Class<?> verifyAndDefaultResultTypeToDriverCapabilities(Class<?> userType) {
+
+		if (userType == Object.class) {
+			return BsonValue.class;
+		}
+
+		try {
+			getMongoDatabase().getCodecRegistry().get(userType);
+		} catch (CodecConfigurationException e) {
+			return BsonValue.class;
+		}
+
+		return userType;
+	}
+
+	/**
+	 * @param userType must not be {@literal null}.
+	 * @param domainType must not be {@literal null}.
+	 * @param field must not be {@literal null}.
+	 * @return the most specific conversion target type depending on user preference and domain type property.
+	 * @since 2.1
+	 */
+	private Class<?> getMostSpecificConversionTargetType(Class<?> userType, Class<?> domainType, String field) {
+
+		Class<?> conversionTargetType = userType;
+		try {
+
+			Class<?> propertyType = PropertyPath.from(field, domainType).getLeafProperty().getLeafType();
+
+			// use the more specific type but favor UserType over property one
+			if (ClassUtils.isAssignable(userType, propertyType)) {
+				conversionTargetType = propertyType;
+			}
+
+		} catch (PropertyReferenceException e) {
+			// just don't care about it as we default to Object.class anyway.
+		}
+
+		return conversionTargetType;
+	}
+
+	/**
+	 * @param targetType the desired conversion target type.
+	 * @return new {@link com.mongodb.Function} converting {@link BsonValue} into desired target type.
+	 * @since 2.1
+	 */
+	private <S, T> Function<S, T> mapDistinctResult(Class<T> targetType) {
+
+		return (source) -> {
+
+			if (source instanceof BsonValue) {
+
+				Object value = BsonUtils.toJavaType((BsonValue) source);
+
+				if (value instanceof Document) {
+					return mongoConverter.read(targetType, (Document) value);
+				} else {
+					if (!ClassUtils.isAssignable(targetType, value.getClass())) {
+						if (getConverter().getConversionService().canConvert(value.getClass(), targetType)) {
+							return getConverter().getConversionService().convert(value, targetType);
+						}
+					}
+				}
+
+				return (T) value;
+			}
+			return (T) source;
+		};
 	}
 
 	/*
